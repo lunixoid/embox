@@ -7,4 +7,6 @@ module dw_hdmi {
 	option number base_addr
 
 	source "dw_hdmi.c"
+
+	depends embox.driver.clk.ccm_imx6
 }
