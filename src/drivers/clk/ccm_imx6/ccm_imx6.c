@@ -64,7 +64,7 @@ static const struct clk clks_repo[] = {
 	{ MXC_CCM_CCGR2, 2, "isfr" },
 };
 
-int clock_enable(char *clk_name) {
+int clk_enable(char *clk_name) {
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(clks_repo); i ++) {
