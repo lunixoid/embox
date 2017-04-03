@@ -7,6 +7,8 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <drivers/common/memory.h>
+
 #include <hal/reg.h>
 
 #include <util/array.h>
@@ -81,4 +83,11 @@ int clk_enable(char *clk_name) {
 
 	return -1; 
 }
+
+static struct periph_memory_desc ccm_mem = {
+	.start = CCM_BASE,
+	.len   = 0x100,
+};
+
+PERIPH_MEMORY_DEFINE(ccm_mem);
 

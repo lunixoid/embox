@@ -6,6 +6,8 @@
  */
 #include <stdint.h>
 
+#include <drivers/common/memory.h>
+
 #include <hal/reg.h>
 
 #include <util/log.h>
@@ -28,6 +30,7 @@ struct dw_hdmi {
 	uint8_t (*read)(struct dw_hdmi *hdmi, int offset);
 	void (*write)(struct dw_hdmi *hdmi, uint8_t val, int offset) ;
 };
+
 static struct dw_hdmi dw_hdmi;
 
 static void dw_hdmi_writeb(struct dw_hdmi *hdmi, uint8_t val, int offset)
@@ -71,4 +74,11 @@ static int dw_hdmi_init(void) {
 		 hdmi_readb(hdmi, HDMI_PRODUCT_ID1));
 	return 0;
 }
+
+static struct periph_memory_desc dw_hdmi_mem = {
+	.start = DW_HDMI_BASE,
+	.len   = 0x8000,
+};
+
+PERIPH_MEMORY_DEFINE(dw_hdmi_mem);
 
