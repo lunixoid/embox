@@ -55,6 +55,31 @@
 //#define MXC_CCM_CCGR7      (CCM_BASE + 0x84)
 #define MXC_CCM_CMEOR       (CCM_BASE + 0x84)
 
+
+#define MXC_CCM_CHSCCDR_IPU1_DI1_PRE_CLK_SEL_MASK   (0x7 << 15)
+#define MXC_CCM_CHSCCDR_IPU1_DI1_PRE_CLK_SEL_OFFSET 15
+#define MXC_CCM_CHSCCDR_IPU1_DI1_PODF_MASK          (0x7 << 12)
+#define MXC_CCM_CHSCCDR_IPU1_DI1_PODF_OFFSET        12
+#define MXC_CCM_CHSCCDR_IPU1_DI1_CLK_SEL_MASK       (0x7 << 9)
+#define MXC_CCM_CHSCCDR_IPU1_DI1_CLK_SEL_OFFSET     9
+#define MXC_CCM_CHSCCDR_IPU1_DI0_PRE_CLK_SEL_MASK   (0x7 << 6)
+#define MXC_CCM_CHSCCDR_IPU1_DI0_PRE_CLK_SEL_OFFSET 6
+#define MXC_CCM_CHSCCDR_IPU1_DI0_PODF_MASK          (0x7 << 3)
+#define MXC_CCM_CHSCCDR_IPU1_DI0_PODF_OFFSET        3
+#define MXC_CCM_CHSCCDR_IPU1_DI0_CLK_SEL_MASK       (0x7)
+#define MXC_CCM_CHSCCDR_IPU1_DI0_CLK_SEL_OFFSET     0
+
+#define MXC_CCM_CHSCCDR_EPDC_PRE_CLK_SEL_MASK       (0x7 << 15)
+#define MXC_CCM_CHSCCDR_EPDC_PRE_CLK_SEL_OFFSET     15
+#define MXC_CCM_CHSCCDR_EPDC_PODF_MASK              (0x7 << 12)
+#define MXC_CCM_CHSCCDR_EPDC_PODF_OFFSET            12
+#define MXC_CCM_CHSCCDR_EPDC_CLK_SEL_MASK           (0x7 << 9)
+#define MXC_CCM_CHSCCDR_EPDC_CLK_SEL_OFFSET         9
+
+#define CHSCCDR_CLK_SEL_LDB_DI0                     3
+#define CHSCCDR_PODF_DIVIDE_BY_3                    2
+#define CHSCCDR_IPU_PRE_CLK_540M_PFD                5
+
 struct clk {
 	uint32_t reg_offset;
 	int bit_num;
@@ -62,8 +87,8 @@ struct clk {
 };
 
 static const struct clk clks_repo[] = {
-	{ MXC_CCM_CCGR2, 0, "iahb" },
-	{ MXC_CCM_CCGR2, 2, "isfr" },
+	{ MXC_CCM_CCGR2, 1, "iahb" },
+	{ MXC_CCM_CCGR2, 3<<4, "isfr" },
 };
 
 int clk_enable(char *clk_name) {
@@ -74,14 +99,24 @@ int clk_enable(char *clk_name) {
 			uint32_t reg;
 
 			reg = REG32_LOAD(clks_repo[i].reg_offset);
-			reg |= 1 << clks_repo[i].bit_num;
+			reg |= clks_repo[i].bit_num;
 			REG32_STORE(clks_repo[i].reg_offset, reg);
-
+#if 0
+			reg = REG32_LOAD(MXC_CCM_CHSCDR);
+			reg &= ~(MXC_CCM_CHSCCDR_IPU1_DI0_PRE_CLK_SEL_MASK|
+				 MXC_CCM_CHSCCDR_IPU1_DI0_PODF_MASK|
+				 MXC_CCM_CHSCCDR_IPU1_DI0_CLK_SEL_MASK);
+			reg |= (CHSCCDR_PODF_DIVIDE_BY_3
+				 << MXC_CCM_CHSCCDR_IPU1_DI0_PODF_OFFSET)
+				 |(CHSCCDR_IPU_PRE_CLK_540M_PFD
+				 << MXC_CCM_CHSCCDR_IPU1_DI0_PRE_CLK_SEL_OFFSET);
+			REG32_STORE(MXC_CCM_CHSCDR, reg);
+#endif
 			return i;
 		}
 	}
 
-	return -1; 
+	return -1;
 }
 
 static struct periph_memory_desc ccm_mem = {
