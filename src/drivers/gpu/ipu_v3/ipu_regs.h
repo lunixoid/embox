@@ -8,6 +8,11 @@
 #ifndef SRC_DRIVERS_GPU_IPU_V3_IPU_REGS_H_
 #define SRC_DRIVERS_GPU_IPU_V3_IPU_REGS_H_
 
+#define IPU_BASE OPTION_MODULE_GET( \
+		embox__driver__gpu__ipu_v3, \
+		NUMBER,   \
+		base_addr)
+
 #define IPU_MCU_T_DEFAULT    8
 #define IPU_CM_IDMAC_REG_OFS 0x00008000
 #define IPU_CM_IC_REG_OFS    0x00020000
@@ -18,9 +23,11 @@
 #define IPU_CM_DC_REG_OFS    0x00058000
 #define IPU_CM_DMFC_REG_OFS  0x00060000
 
-#define IPU_CM_REG(offset)     (offset)
+#define IPU_CM_REG(offset)     (IPU_BASE + offset)
 
 #define IPU_CONF               IPU_CM_REG(0)
+
+#define IPU_CPMEM		(IPU_CONF + 0x10000)
 
 #define IPU_SRM_PRI1                IPU_CM_REG(0x00a0)
 #define IPU_SRM_PRI2                IPU_CM_REG(0x00a4)
