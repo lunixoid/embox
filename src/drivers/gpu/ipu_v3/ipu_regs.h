@@ -29,6 +29,7 @@
 
 #define IPU_CPMEM		(IPU_CONF + 0x10000)
 
+#define IPU_INT_CTRL(n)             IPU_CM_REG(0x003c + (n - 1) * 4)
 #define IPU_SRM_PRI1                IPU_CM_REG(0x00a0)
 #define IPU_SRM_PRI2                IPU_CM_REG(0x00a4)
 #define IPU_FS_PROC_FLOW1           IPU_CM_REG(0x00a8)
@@ -61,7 +62,6 @@
 #define IPU_ALT_CHA_BUF0_RDY(ch)    IPU_CM_REG(0x0278 + 4 * ((ch) / 32))
 #define IPU_ALT_CHA_BUF1_RDY(ch)    IPU_CM_REG(0x0280 + 4 * ((ch) / 32))
 
-#define IPU_INT_CTRL(n)             IPU_CM_REG(0x003C + 4 * (n))
 #define IPU_INT_STAT(n)             IPU_CM_REG(0x0200 + 4 * (n))
 
 #define IPU_DI0_COUNTER_RELEASE     (1 << 24)

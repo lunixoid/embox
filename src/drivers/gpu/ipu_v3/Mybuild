@@ -6,6 +6,8 @@ module ipu_v3 {
 	option number base_addr
 
 	source "ipuv3.c"
+	source "ipuv3_fb.c"
 
 	depends embox.driver.clk.ccm_imx6
+	depends embox.driver.video.fb
 }
