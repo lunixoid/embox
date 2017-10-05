@@ -8,6 +8,8 @@
 #ifndef SRC_DRIVERS_GPU_IPU_V3_IPU_REGS_H_
 #define SRC_DRIVERS_GPU_IPU_V3_IPU_REGS_H_
 
+#include <kernel/printk.h>
+
 #define IPU_BASE OPTION_MODULE_GET( \
 		embox__driver__gpu__ipu_v3, \
 		NUMBER,   \
@@ -83,5 +85,28 @@
 #define IDMAC_BAND_EN(ch)           IPU_IDMAC_REG(0x0040 + 4 * ((ch) / 32))
 #define IDMAC_CHA_BUSY(ch)          IPU_IDMAC_REG(0x0100 + 4 * ((ch) / 32))
 
+static inline uint32_t IPU_DC_WR_CH_CONF(int n) {
+	switch (n) {
+	case 1:
+		return IPU_CM_REG(0x5801C);
+	case 2:
+		return IPU_CM_REG(0x58038);
+	case 5:
+		return IPU_CM_REG(0x5805C);
+	case 6:
+		return IPU_CM_REG(0x58078);
+	case 8:
+		return IPU_CM_REG(0x58094);
+	case 9:
+		return IPU_CM_REG(0x580B4);
+	}
+
+	printk("IPU: bad channel id=%d\n", n);
+	return 0;
+}
+
+#define IPU_DC_WR_CH_ADDR(n) (IPU_DC_WR_CH_CONF(n) + 4)
+
+#define IPU_DC_GEN		IPU_CM_REG(0x580D4)
 
 #endif /* SRC_DRIVERS_GPU_IPU_V3_IPU_REGS_H_ */

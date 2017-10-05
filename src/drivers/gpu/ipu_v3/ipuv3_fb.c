@@ -14,11 +14,13 @@
 
 EMBOX_UNIT_INIT(ipu_init);
 
-extern int ipu_setup_params(int ch);
+extern int ipu_setup_params();
 extern int ipu_probe(void);
-extern int ipu_disable_channel(int ch);
+extern int ipu_init_channel(int ch);
 extern int ipu_enable_channel(int ch);
-extern int ipu_init_sync_panel(void);
+extern int ipu_disable_channel(int ch);
+extern int ipu_init_sync_panel(int ch);
+extern int ipu_init_channel_buffer(struct fb_info *fb);
 
 #define IPU_MAX_WIDTH	1024
 #define IPU_MAX_HEIGHT	1024
@@ -26,13 +28,6 @@ extern int ipu_init_sync_panel(void);
 static uint16_t ipu_fb[IPU_MAX_WIDTH * IPU_MAX_HEIGHT]
 			__attribute__ ((aligned (0x8)));
 
-static int setup_disp_phase_one(struct fb_info *info) {
-	return 0;
-}
-
-static int setup_disp_phase_one(struct fb_info *info) {
-	return 0;
-}
 
 static int ipu_set_var(struct fb_info *info,
 		struct fb_var_screeninfo const *var) {
@@ -40,11 +35,16 @@ static int ipu_set_var(struct fb_info *info,
 
 	ipu_disable_channel(ch);
 
-	setup_disp_phase_one(info);
+	/* Phase one */
+	ipu_init_channel(info->id);
 
 	/* Setup signal config */
 
-	setup_disp_phase_two(info);
+	ipu_init_sync_panel(ch);
+
+	/* Phase two */
+	ipu_init_channel_buffer(info);
+
 	return 0;
 }
 
