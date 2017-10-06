@@ -5,6 +5,7 @@
  * @author Anton Bondarev
  */
 #include <hal/reg.h>
+#include <drivers/common/memory.h>
 #include <drivers/video/fb.h>
 #include <util/log.h>
 
@@ -113,3 +114,10 @@ int ipu_probe(void)
 	/* Disable IPU clock */
 	return 0;
 }
+
+static struct periph_memory_desc ipu_mem = {
+	.start = IPU_BASE,
+	.len   = 0x100000,
+};
+
+PERIPH_MEMORY_DEFINE(ipu_mem);
