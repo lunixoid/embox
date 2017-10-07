@@ -10,6 +10,11 @@
 
 #include <kernel/printk.h>
 
+#define IPU1_ERROR_IRQ  37
+#define IPU1_SYNC_IRQ   38
+#define IPU2_ERROR_IRQ  39
+#define IPU2_SYNC_IRQ   40
+
 #define IPU_BASE OPTION_MODULE_GET( \
 		embox__driver__gpu__ipu_v3, \
 		NUMBER,   \

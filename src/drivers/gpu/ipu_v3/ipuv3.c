@@ -7,6 +7,7 @@
 #include <hal/reg.h>
 #include <drivers/common/memory.h>
 #include <drivers/video/fb.h>
+#include <kernel/irq.h>
 #include <string.h>
 #include <util/log.h>
 
@@ -179,9 +180,19 @@ int ipu_init_channel_buffer(struct fb_info *fbi) {
 	return 0;
 }
 
+static irq_return_t ipu_error_handler(unsigned int irq_nr, void *data) {
+	log_error("IPU%d error interrupt request", (int) data);
+	return IRQ_HANDLED;
+}
+
+static irq_return_t ipu_sync_handler(unsigned int irq_nr, void *data) {
+	log_error("IPU%d sync interrupt request", (int) data);
+	return IRQ_HANDLED;
+}
+
 int ipu_probe(void)
 {
-	int i;
+	int i, err;
 	/* Enable IPU clock */
 
 	/* Clear internal memories of IPU */
@@ -193,6 +204,44 @@ int ipu_probe(void)
 	/* Disable all interrupts */
 	for (i = 1; i < 16; i++) {
 		REG32_STORE(IPU_INT_CTRL(i), 0);
+	}
+
+	/* Enable error interrupts */
+	REG32_STORE(IPU_INT_CTRL(5),  0xFFFFFFFF);
+	REG32_STORE(IPU_INT_CTRL(6),  0xFFFFFFFF);
+	REG32_STORE(IPU_INT_CTRL(9),  0xFFFFFFFF);
+	REG32_STORE(IPU_INT_CTRL(10), 0xFFFFFFFF);
+
+	if ((err = irq_attach(IPU1_ERROR_IRQ,
+			ipu_error_handler, 0,
+			(void *) 1, /* IPU1 */
+			"IPU1 error interrupt request"))) {
+		log_error("Failed to attach IPU1 error IRQ handler");
+		return err;
+	}
+
+	if ((err = irq_attach(IPU2_ERROR_IRQ,
+			ipu_error_handler, 0,
+			(void *) 2, /* IPU2 */
+			"IPU2 error interrupt request"))) {
+		log_error("Failed to attach IPU2 error IRQ handler");
+		return err;
+	}
+
+	if ((err = irq_attach(IPU1_SYNC_IRQ,
+			ipu_sync_handler, 0,
+			(void *) 1, /* IPU1 */
+			"IPU1 sync interrupt request"))) {
+		log_error("Failed to attach IPU1 sync IRQ handler");
+		return err;
+	}
+
+	if ((err = irq_attach(IPU2_SYNC_IRQ,
+			ipu_sync_handler, 0,
+			(void *) 2, /* IPU2 */
+			"IPU2 sync interrupt request"))) {
+		log_error("Failed to attach IPU2 sync IRQ handler");
+		return err;
 	}
 
 	/* Init DMFC */
