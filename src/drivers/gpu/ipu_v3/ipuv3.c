@@ -101,9 +101,9 @@ int ipu_dc_init(int ch) {
 	conf |= ipu_display << 3;
 	conf |= 8 << 5; /* Normal mode without anti-tearing */
 
-	REG32_STORE(conf, IPU_DC_WR_CH_CONF(ch));
-	REG32_STORE(0, IPU_DC_WR_CH_ADDR(ch));
-	REG32_STORE(0x84, IPU_DC_GEN);
+	REG32_STORE(IPU_DC_WR_CH_CONF(ch), conf);
+	REG32_STORE(IPU_DC_WR_CH_ADDR(ch), 0);
+	REG32_STORE(IPU_DC_GEN, 0x84);
 
 	return 0;
 }
