@@ -114,4 +114,46 @@ static inline uint32_t IPU_DC_WR_CH_CONF(int n) {
 
 #define IPU_DC_GEN		IPU_CM_REG(0x580D4)
 
+#define DC_REG			((struct ipu_dc *)(IPU_BASE + IPU_CM_DC_REG_OFS))
+#define DC_MAP_CONF_PTR(n)	(&DC_REG->dc_map_ptr[n / 2])
+#define DC_MAP_CONF_VAL(n)	(&DC_REG->dc_map_val[n / 2])
+
+struct ipu_dc_ch {
+	uint32_t wr_ch_conf;
+	uint32_t wr_ch_addr;
+	uint32_t rl[5];
+};
+
+struct ipu_dc {
+	struct ipu_dc_ch dc_ch0_1_2[3];
+	uint32_t cmd_ch_conf_3;
+	uint32_t cmd_ch_conf_4;
+	struct ipu_dc_ch dc_ch5_6[2];
+	struct ipu_dc_ch dc_ch8;
+	uint32_t rl6_ch_8;
+	struct ipu_dc_ch dc_ch9;
+	uint32_t rl6_ch_9;
+	uint32_t gen;
+	uint32_t disp_conf1[4];
+	uint32_t disp_conf2[4];
+	uint32_t di0_conf[2];
+	uint32_t di1_conf[2];
+	uint32_t dc_map_ptr[15];
+	uint32_t dc_map_val[12];
+	uint32_t udge[16];
+	uint32_t lla[2];
+	uint32_t r_lla[2];
+	uint32_t wr_ch_addr_5_alt;
+	uint32_t stat;
+};
+
+#define DMFC_RD_CHAN		(IPU_BASE + 0x60000)
+#define DMFC_WR_CHAN		(IPU_BASE + 0x60004)
+#define DMFC_WR_CHAN_DEF	(IPU_BASE + 0x60008)
+#define DMFC_DP_CHAN		(IPU_BASE + 0x6000C)
+#define DMFC_DP_CHAN_DEF	(IPU_BASE + 0x60010)
+#define DMFC_GENERAL_1		(IPU_BASE + 0x60014)
+#define DMFC_GENERAL_2		(IPU_BASE + 0x60018)
+#define DMFC_IC_CTRL		(IPU_BASE + 0x6001C)
+
 #endif /* SRC_DRIVERS_GPU_IPU_V3_IPU_REGS_H_ */

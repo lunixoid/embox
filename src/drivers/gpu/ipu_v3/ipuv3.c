@@ -39,8 +39,8 @@ struct ipu_ch_param {
 #define ipu_ch_param_mod_field(base, w, bit, size, v) { \
 	int i = (bit) / 32; \
 	int off = (bit) % 32; \
-	u32 mask = (1UL << size) - 1; \
-	u32 temp = _param_word(base, w)[i]; \
+	uint32_t mask = (1UL << size) - 1; \
+	uint32_t temp = _param_word(base, w)[i]; \
 	temp &= ~(mask << off); \
 	_param_word(base, w)[i] = temp | (v) << off; \
 	if (((bit) + (size) - 1) / 32 > i) { \
@@ -52,11 +52,11 @@ struct ipu_ch_param {
 }
 
 #define ipu_ch_param_read_field(base, w, bit, size) ({ \
-	u32 temp2; \
+	uint32_t temp2; \
 	int i = (bit) / 32; \
 	int off = (bit) % 32; \
-	u32 mask = (1UL << size) - 1; \
-	u32 temp1 = _param_word(base, w)[i]; \
+	uint32_t mask = (1UL << size) - 1; \
+	uint32_t temp1 = _param_word(base, w)[i]; \
 	temp1 = mask & (temp1 >> off); \
 	if (((bit)+(size) - 1) / 32 > i) { \
 		temp2 = _param_word(base, w)[i + 1]; \
@@ -71,6 +71,9 @@ static const int ipu_num = 1;             /* 1..2 */
 static const int ipu_word_size_bits = 24; /* 8, 16, 24 or 32 */
 static const int ipu_di = 0;              /* 0..1 */
 static const int ipu_display = 2;         /* 0..3 */
+
+static const int ch_num = 7;
+static const int dma_ch = 28;
 
 int ipu_setup_params() {
 	log_debug("%s is NIY", __func__);
@@ -163,8 +166,17 @@ static inline void ipu_ch_params_set_packing(struct ipu_ch_param *p,
 
 int ipu_ch_write_params(struct fb_info *fbi) {
 	struct ipu_ch_param params;
-
+	int width = fbi->var.xres;
+	int height = fbi->var.yres;
+	int stride = 0, u_offset = 0, v_offset = 0;
 	memset(&params, 0, sizeof(params));
+
+	ipu_ch_param_set_field(&params, 0, 125, 13, width - 1);
+	ipu_ch_param_set_field(&params, 0, 138, 12, (height / 2) - 1);
+	ipu_ch_param_set_field(&params, 1, 102, 14, (stride * 2) - 1);
+
+	ipu_ch_param_set_field(&params, 1, 0, 29, ((uint32_t)fbi->screen_base) >> 3);
+	ipu_ch_param_set_field(&params, 1, 29, 29, 0 >> 3);
 
 	/* RGB565 */
 	ipu_ch_param_set_field(&params, 0, 107, 3, 3);	/* bits/pixel */
@@ -173,11 +185,20 @@ int ipu_ch_write_params(struct fb_info *fbi) {
 
 	ipu_ch_params_set_packing(&params, 5, 0, 6, 5, 5, 11, 8, 16);
 
+	ipu_ch_param_set_field(&params, 0, 46, 22, u_offset / 8);
+	ipu_ch_param_set_field(&params, 0, 68, 22, v_offset / 8);
+
+	memcpy(ipu_ch_param_addr(ch_num), &params, sizeof(params));
 	return 0;
 }
 
 int ipu_init_channel_buffer(struct fb_info *fbi) {
+	//uint32_t reg;
 	ipu_ch_write_params(fbi);
+
+	//reg = REG32_LOAD(IPU_CHA_DB_MODE_SEL(dma_ch));
+
+
 	return 0;
 }
 
@@ -189,6 +210,81 @@ static irq_return_t ipu_error_handler(unsigned int irq_nr, void *data) {
 static irq_return_t ipu_sync_handler(unsigned int irq_nr, void *data) {
 	log_error("IPU%d sync interrupt request", (int) data);
 	return IRQ_HANDLED;
+}
+
+static void ipu_dc_map_config(int map, int byte_num, int offset, int mask)
+{
+	int ptr = map * 3 + byte_num;
+	uint32_t reg;
+
+	reg = REG32_LOAD(DC_MAP_CONF_VAL(ptr));
+	reg &= ~(0xFFFF << (16 * (ptr & 0x1)));
+	reg |= ((offset << 8) | mask) << (16 * (ptr & 0x1));
+	REG32_STORE(DC_MAP_CONF_VAL(ptr), reg);
+
+	reg = REG32_LOAD(DC_MAP_CONF_PTR(map));
+	reg &= ~(0x1F << ((16 * (map & 0x1)) + (5 * byte_num)));
+	reg |= ptr << ((16 * (map & 0x1)) + (5 * byte_num));
+	REG32_STORE(DC_MAP_CONF_PTR(map), reg);
+}
+
+static void ipu_dc_map_clear(int map)
+{
+	uint32_t reg = REG32_LOAD(DC_MAP_CONF_PTR(map));
+	REG32_STORE(DC_MAP_CONF_PTR(map), reg & ~(0xFFFF << (16 * (map & 0x1))));
+}
+
+void ipu_init_dc_mappings(void)
+{
+	/* IPU_PIX_FMT_RGB24 */
+	ipu_dc_map_clear(0);
+	ipu_dc_map_config(0, 0, 7, 0xFF);
+	ipu_dc_map_config(0, 1, 15, 0xFF);
+	ipu_dc_map_config(0, 2, 23, 0xFF);
+
+	/* IPU_PIX_FMT_RGB666 */
+	ipu_dc_map_clear(1);
+	ipu_dc_map_config(1, 0, 5, 0xFC);
+	ipu_dc_map_config(1, 1, 11, 0xFC);
+	ipu_dc_map_config(1, 2, 17, 0xFC);
+
+	/* IPU_PIX_FMT_YUV444 */
+	ipu_dc_map_clear(2);
+	ipu_dc_map_config(2, 0, 15, 0xFF);
+	ipu_dc_map_config(2, 1, 23, 0xFF);
+	ipu_dc_map_config(2, 2, 7, 0xFF);
+
+	/* IPU_PIX_FMT_RGB565 */
+	ipu_dc_map_clear(3);
+	ipu_dc_map_config(3, 0, 4, 0xF8);
+	ipu_dc_map_config(3, 1, 10, 0xFC);
+	ipu_dc_map_config(3, 2, 15, 0xF8);
+
+	/* IPU_PIX_FMT_LVDS666 */
+	ipu_dc_map_clear(4);
+	ipu_dc_map_config(4, 0, 5, 0xFC);
+	ipu_dc_map_config(4, 1, 13, 0xFC);
+	ipu_dc_map_config(4, 2, 21, 0xFC);
+}
+
+static int dmfc_size_28, dmfc_size_29, dmfc_size_24, dmfc_size_27, dmfc_size_23;
+void ipu_dmfc_init() {
+	uint32_t dmfc_wr_chan, dmfc_dp_chan;
+
+	/* disable DMFC-IC channel*/
+	REG32_STORE(DMFC_IC_CTRL, 0x2);
+	dmfc_wr_chan = 0x00000090;
+	dmfc_dp_chan = 0x00009694;
+	dmfc_size_28 = 128 * 4;
+	dmfc_size_29 = 0;
+	dmfc_size_24 = 0;
+	dmfc_size_27 = 128 * 4;
+	dmfc_size_23 = 128 * 4;
+
+	REG32_STORE(DMFC_WR_CHAN, dmfc_wr_chan);
+	REG32_STORE(DMFC_WR_CHAN_DEF, 0x202020F6);
+	REG32_STORE(DMFC_DP_CHAN, dmfc_dp_chan);
+	REG32_STORE(DMFC_DP_CHAN_DEF, 0x2020F6F6);
 }
 
 #define DCIC1_BASE 0x20E4000
@@ -220,6 +316,7 @@ int ipu_probe(void)
 	}
 
 	/* Init display controller mappings */
+	ipu_init_dc_mappings();
 
 	/* Disable all interrupts */
 	for (i = 1; i < 16; i++) {
@@ -264,6 +361,7 @@ int ipu_probe(void)
 	REG32_STORE(IPU_INT_CTRL(10), 0xFFFFFFFF);
 
 	/* Init DMFC */
+	ipu_dmfc_init();
 
 	/* Setup priority */
 
