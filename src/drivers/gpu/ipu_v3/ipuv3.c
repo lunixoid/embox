@@ -67,6 +67,7 @@ struct ipu_ch_param {
 })
 
 /* Default config      Parameters            Possible values */
+static const int ipu_num = 1;             /* 1..2 */
 static const int ipu_word_size_bits = 24; /* 8, 16, 24 or 32 */
 static const int ipu_di = 0;              /* 0..1 */
 static const int ipu_display = 2;         /* 0..3 */
@@ -190,14 +191,33 @@ static irq_return_t ipu_sync_handler(unsigned int irq_nr, void *data) {
 	return IRQ_HANDLED;
 }
 
+#define DCIC1_BASE 0x20E4000
+#define DCIC2_BASE 0x20E8000
+
+extern int clk_enable(char *clk_name);
 int ipu_probe(void)
 {
 	int i, err;
-	/* Enable IPU clock */
+	static char *clk_ipu_name = "ipu_";
+	static char *clk_di_name  = "ipu__di_";
+	/* Enable IPU and DI clocks */
+	clk_ipu_name[3] = clk_di_name[3] = '0' + (char) ipu_num;
+	clk_di_name[7] = '0' + (char) ipu_di;
+
+	clk_enable(clk_ipu_name);
+	clk_enable(clk_di_name);
+
+	/* Turn off integrity check */
+	clk_enable("dcic1"); /* Enable clk to write config register */
+	REG32_CLEAR(DCIC1_BASE, 1);
+	clk_enable("dcic2");
+	//REG32_CLEAR(DCIC2_BASE, 1);
 
 	/* Clear internal memories of IPU */
 	REG32_STORE(IPU_MEM_RST, 0x807FFFFF);
-	while (REG32_LOAD(IPU_MEM_RST) & 0x80000000);
+	while (REG32_LOAD(IPU_MEM_RST) & 0x80000000) {
+		log_debug("mem reset %x", REG32_LOAD(IPU_MEM_RST));
+	}
 
 	/* Init display controller mappings */
 
@@ -207,11 +227,6 @@ int ipu_probe(void)
 	}
 
 	/* Enable error interrupts */
-	REG32_STORE(IPU_INT_CTRL(5),  0xFFFFFFFF);
-	REG32_STORE(IPU_INT_CTRL(6),  0xFFFFFFFF);
-	REG32_STORE(IPU_INT_CTRL(9),  0xFFFFFFFF);
-	REG32_STORE(IPU_INT_CTRL(10), 0xFFFFFFFF);
-
 	if ((err = irq_attach(IPU1_ERROR_IRQ,
 			ipu_error_handler, 0,
 			(void *) 1, /* IPU1 */
@@ -243,6 +258,10 @@ int ipu_probe(void)
 		log_error("Failed to attach IPU2 sync IRQ handler");
 		return err;
 	}
+	REG32_STORE(IPU_INT_CTRL(5),  0xFFFFFFFF);
+	REG32_STORE(IPU_INT_CTRL(6),  0xFFFFFFFF);
+	REG32_STORE(IPU_INT_CTRL(9),  0xFFFFFFFF);
+	REG32_STORE(IPU_INT_CTRL(10), 0xFFFFFFFF);
 
 	/* Init DMFC */
 
@@ -258,3 +277,17 @@ static struct periph_memory_desc ipu_mem = {
 };
 
 PERIPH_MEMORY_DEFINE(ipu_mem);
+
+static struct periph_memory_desc dcic1_mem = {
+	.start = DCIC1_BASE,
+	.len   = 0x20,
+};
+
+PERIPH_MEMORY_DEFINE(dcic1_mem);
+
+static struct periph_memory_desc dcic2_mem = {
+	.start = DCIC2_BASE,
+	.len   = 0x20,
+};
+
+PERIPH_MEMORY_DEFINE(dcic2_mem);
