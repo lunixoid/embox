@@ -82,13 +82,35 @@
 
 struct clk {
 	uint32_t reg_offset;
-	int bit_num;
+	uint32_t bit_num;
 	const char *clk_name;
 };
 
+/* TODO pass clock mode as parameter?
+ *
+ * In registers binary values will be as follows (from manual):
+ *
+ * 00 Clock is off during all modes. Stop enter hardware handshake is disabled.
+ * 01 Clock is on in run mode, but off in WAIT and STOP modes
+ * 10 Not applicable (Reserved).
+ * 11 Clock is on during all modes, except STOP mode.
+ *
+ * Usually we just use 11 (i.e. 3 << offt).
+ */
+
 static const struct clk clks_repo[] = {
-	{ MXC_CCM_CCGR2, 1, "iahb" },
-	{ MXC_CCM_CCGR2, 3<<4, "isfr" },
+	{ MXC_CCM_CCGR0, 3 << 24, "dcic1" },
+	{ MXC_CCM_CCGR0, 3 << 26, "dcic2" },
+	{ MXC_CCM_CCGR2, 1,       "iahb" },
+	{ MXC_CCM_CCGR2, 3 << 4,  "isfr" },
+	{ MXC_CCM_CCGR3, 3 << 0,  "ipu1" },
+	{ MXC_CCM_CCGR3, 3 << 2,  "ipu1_di0" },
+	{ MXC_CCM_CCGR3, 3 << 4,  "ipu1_di1" },
+	{ MXC_CCM_CCGR3, 3 << 6,  "ipu2" },
+	{ MXC_CCM_CCGR3, 3 << 8,  "ipu2_di0" },
+	{ MXC_CCM_CCGR3, 3 << 10, "ipu2_di1" },
+	{ MXC_CCM_CCGR3, 3 << 12, "ldb_di0" },
+	{ MXC_CCM_CCGR3, 3 << 14, "ldb_di1" },
 };
 
 int clk_enable(char *clk_name) {
@@ -96,11 +118,7 @@ int clk_enable(char *clk_name) {
 
 	for (i = 0; i < ARRAY_SIZE(clks_repo); i ++) {
 		if (0 == strcmp(clks_repo[i].clk_name, clk_name)) {
-			uint32_t reg;
-
-			reg = REG32_LOAD(clks_repo[i].reg_offset);
-			reg |= clks_repo[i].bit_num;
-			REG32_STORE(clks_repo[i].reg_offset, reg);
+			REG32_ORIN(clks_repo[i].reg_offset, clks_repo[i].bit_num);
 #if 0
 			reg = REG32_LOAD(MXC_CCM_CHSCDR);
 			reg &= ~(MXC_CCM_CHSCCDR_IPU1_DI0_PRE_CLK_SEL_MASK|
@@ -125,4 +143,3 @@ static struct periph_memory_desc ccm_mem = {
 };
 
 PERIPH_MEMORY_DEFINE(ccm_mem);
-
