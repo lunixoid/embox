@@ -77,5 +77,9 @@ int ipu_init(void)
 
 	ipu_set_var(fbi, &fbi->var);
 
+	for (int i = 0; i < IPU_MAX_WIDTH * IPU_MAX_HEIGHT; i++) {
+		ipu_fb[i] = 0x0101 * (i % 256);
+	}
+
 	return 0;
 }
