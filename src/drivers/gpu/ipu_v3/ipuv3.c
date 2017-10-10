@@ -12,7 +12,7 @@
 #include <util/log.h>
 
 #include "ipu_regs.h"
-
+#include "uboot_ipu_compat.h"
 struct ipu_ch_param_word {
 	uint32_t data[5];
 	uint32_t res[3];
@@ -66,6 +66,83 @@ struct ipu_ch_param {
 	temp1; \
 })
 
+typedef enum {
+	CHAN_NONE = -1,
+
+	MEM_DC_SYNC = _MAKE_CHAN(7, 28, NO_DMA, NO_DMA, NO_DMA),
+	MEM_DC_ASYNC = _MAKE_CHAN(8, 41, NO_DMA, NO_DMA, NO_DMA),
+	MEM_BG_SYNC = _MAKE_CHAN(9, 23, NO_DMA, 51, NO_DMA),
+	MEM_FG_SYNC = _MAKE_CHAN(10, 27, NO_DMA, 31, NO_DMA),
+
+	MEM_BG_ASYNC0 = _MAKE_CHAN(11, 24, NO_DMA, 52, NO_DMA),
+	MEM_FG_ASYNC0 = _MAKE_CHAN(12, 29, NO_DMA, 33, NO_DMA),
+	MEM_BG_ASYNC1 = _MAKE_ALT_CHAN(MEM_BG_ASYNC0),
+	MEM_FG_ASYNC1 = _MAKE_ALT_CHAN(MEM_FG_ASYNC0),
+
+	DIRECT_ASYNC0 = _MAKE_CHAN(13, NO_DMA, NO_DMA, NO_DMA, NO_DMA),
+	DIRECT_ASYNC1 = _MAKE_CHAN(14, NO_DMA, NO_DMA, NO_DMA, NO_DMA),
+
+} ipu_channel_t;
+
+/*
+ * Enumeration of types of buffers for a logical channel.
+ */
+typedef enum {
+	IPU_OUTPUT_BUFFER = 0,	/*< Buffer for output from IPU */
+	IPU_ALPHA_IN_BUFFER = 1,	/*< Buffer for input to IPU */
+	IPU_GRAPH_IN_BUFFER = 2,	/*< Buffer for input to IPU */
+	IPU_VIDEO_IN_BUFFER = 3,	/*< Buffer for input to IPU */
+	IPU_INPUT_BUFFER = IPU_VIDEO_IN_BUFFER,
+	IPU_SEC_INPUT_BUFFER = IPU_GRAPH_IN_BUFFER,
+} ipu_buffer_t;
+
+#define IPU_PANEL_SERIAL		1
+#define IPU_PANEL_PARALLEL		2
+
+struct ipu_channel {
+	u8 video_in_dma;
+	u8 alpha_in_dma;
+	u8 graph_in_dma;
+	u8 out_dma;
+};
+
+/* Static functions */
+
+static inline void ipu_ch_param_set_high_priority(uint32_t ch)
+{
+	ipu_ch_param_mod_field(ipu_ch_param_addr(ch), 1, 93, 2, 1);
+};
+
+static inline uint32_t channel_2_dma(ipu_channel_t ch, ipu_buffer_t type)
+{
+	return ((uint32_t) ch >> (6 * type)) & 0x3F;
+};
+
+/* Either DP BG or DP FG can be graphic window */
+static inline int ipu_is_dp_graphic_chan(uint32_t dma_chan)
+{
+	return (dma_chan == 23 || dma_chan == 27);
+}
+
+static inline int ipu_is_dmfc_chan(uint32_t dma_chan)
+{
+	return ((dma_chan >= 23) && (dma_chan <= 29));
+}
+
+
+static inline void ipu_ch_param_set_buffer(uint32_t ch, int bufNum,
+					    dma_addr_t phyaddr)
+{
+	ipu_ch_param_mod_field(ipu_ch_param_addr(ch), 1, 29 * bufNum, 29,
+			       phyaddr / 8);
+};
+
+#define idma_is_valid(ch)	(ch != NO_DMA)
+#define idma_mask(ch)		(idma_is_valid(ch) ? (1UL << (ch & 0x1F)) : 0)
+#define idma_is_set(reg, dma)	(__raw_readl(reg(dma)) & idma_mask(dma))
+
+
+
 /* Default config      Parameters            Possible values */
 static const int ipu_num = 1;             /* 1..2 */
 static const int ipu_word_size_bits = 24; /* 8, 16, 24 or 32 */
@@ -75,9 +152,56 @@ static const int ipu_display = 2;         /* 0..3 */
 static const int ch_num = 7;
 static const int dma_ch = 28;
 
+static const ipu_channel_t default_ipu_channel = MEM_DC_SYNC;
+static const ipu_buffer_t default_ipu_type = IPU_INPUT_BUFFER;
+static const uint32_t pixel_fmt_default = IPU_PIX_FMT_RGB565;
+
 int ipu_setup_params() {
 	log_debug("%s is NIY", __func__);
 	return 0;
+}
+
+static inline void ipu_ch_param_dump(int ch)
+{
+#ifdef DEBUG
+	struct ipu_ch_param *p = ipu_ch_param_addr(ch);
+	debug("ch %d word 0 - %08X %08X %08X %08X %08X\n", ch,
+		 p->word[0].data[0], p->word[0].data[1], p->word[0].data[2],
+		 p->word[0].data[3], p->word[0].data[4]);
+	debug("ch %d word 1 - %08X %08X %08X %08X %08X\n", ch,
+		 p->word[1].data[0], p->word[1].data[1], p->word[1].data[2],
+		 p->word[1].data[3], p->word[1].data[4]);
+	debug("PFS 0x%x, ",
+		 ipu_ch_param_read_field(ipu_ch_param_addr(ch), 1, 85, 4));
+	debug("BPP 0x%x, ",
+		 ipu_ch_param_read_field(ipu_ch_param_addr(ch), 0, 107, 3));
+	debug("NPB 0x%x\n",
+		 ipu_ch_param_read_field(ipu_ch_param_addr(ch), 1, 78, 7));
+
+	debug("FW %d, ",
+		 ipu_ch_param_read_field(ipu_ch_param_addr(ch), 0, 125, 13));
+	debug("FH %d, ",
+		 ipu_ch_param_read_field(ipu_ch_param_addr(ch), 0, 138, 12));
+	debug("Stride %d\n",
+		 ipu_ch_param_read_field(ipu_ch_param_addr(ch), 1, 102, 14));
+
+	debug("Width0 %d+1, ",
+		 ipu_ch_param_read_field(ipu_ch_param_addr(ch), 1, 116, 3));
+	debug("Width1 %d+1, ",
+		 ipu_ch_param_read_field(ipu_ch_param_addr(ch), 1, 119, 3));
+	debug("Width2 %d+1, ",
+		 ipu_ch_param_read_field(ipu_ch_param_addr(ch), 1, 122, 3));
+	debug("Width3 %d+1, ",
+		 ipu_ch_param_read_field(ipu_ch_param_addr(ch), 1, 125, 3));
+	debug("Offset0 %d, ",
+		 ipu_ch_param_read_field(ipu_ch_param_addr(ch), 1, 128, 5));
+	debug("Offset1 %d, ",
+		 ipu_ch_param_read_field(ipu_ch_param_addr(ch), 1, 133, 5));
+	debug("Offset2 %d, ",
+		 ipu_ch_param_read_field(ipu_ch_param_addr(ch), 1, 138, 5));
+	debug("Offset3 %d\n",
+		 ipu_ch_param_read_field(ipu_ch_param_addr(ch), 1, 143, 5));
+#endif
 }
 
 int ipu_dc_init(int ch) {
@@ -126,6 +250,10 @@ int ipu_init_channel(int ch) {
 		reg |= 1 << 7;
 	}
 
+	reg |= 0x200 | 0x400; /* DC_ENABLE, DMFC_ENABLE */
+
+	REG32_STORE(IPU_CONF, reg);
+
 	return 0;
 }
 
@@ -164,19 +292,24 @@ static inline void ipu_ch_params_set_packing(struct ipu_ch_param *p,
 	ipu_ch_param_set_field(p, 1, 143, 5, alpha_offset);
 }
 
-int ipu_ch_write_params(struct fb_info *fbi) {
+static void ipu_ch_param_init(int ch,
+			      uint32_t pixel_fmt, uint32_t width,
+			      uint32_t height, uint32_t stride,
+			      uint32_t u, uint32_t v,
+			      uint32_t uv_stride, dma_addr_t addr0,
+			      dma_addr_t addr1) {
 	struct ipu_ch_param params;
-	int width = fbi->var.xres;
-	int height = fbi->var.yres;
-	int stride = 0, u_offset = 0, v_offset = 0;
+	uint32_t u_offset = u;
+	uint32_t v_offset = v;
+
 	memset(&params, 0, sizeof(params));
 
 	ipu_ch_param_set_field(&params, 0, 125, 13, width - 1);
 	ipu_ch_param_set_field(&params, 0, 138, 12, (height / 2) - 1);
 	ipu_ch_param_set_field(&params, 1, 102, 14, (stride * 2) - 1);
 
-	ipu_ch_param_set_field(&params, 1, 0, 29, ((uint32_t)fbi->screen_base) >> 3);
-	ipu_ch_param_set_field(&params, 1, 29, 29, 0 >> 3);
+	ipu_ch_param_set_field(&params, 1, 0, 29, addr0 >> 3);
+	ipu_ch_param_set_field(&params, 1, 29, 29, addr1 >> 3);
 
 	/* RGB565 */
 	ipu_ch_param_set_field(&params, 0, 107, 3, 3);	/* bits/pixel */
@@ -189,15 +322,44 @@ int ipu_ch_write_params(struct fb_info *fbi) {
 	ipu_ch_param_set_field(&params, 0, 68, 22, v_offset / 8);
 
 	memcpy(ipu_ch_param_addr(ch_num), &params, sizeof(params));
-	return 0;
 }
 
 int ipu_init_channel_buffer(struct fb_info *fbi) {
-	//uint32_t reg;
-	ipu_ch_write_params(fbi);
+	uint32_t reg, dma_chan;
 
-	//reg = REG32_LOAD(IPU_CHA_DB_MODE_SEL(dma_ch));
+	ipu_channel_t channel = default_ipu_channel;
+	ipu_buffer_t type = default_ipu_type;
+	uint32_t pixel_fmt = pixel_fmt_default;
+	uint16_t width = fbi->var.xres;
+	uint16_t height = fbi->var.yres;
+	uint32_t stride = width * 3; // XXX
+	dma_addr_t phyaddr_0 = (uint32_t) fbi->screen_base;
+	dma_addr_t phyaddr_1 = 0;
+	uint32_t u = 0, v = 0;
 
+	dma_chan = channel_2_dma(channel, type);
+
+	ipu_ch_param_init(dma_chan, pixel_fmt, width, height, stride, u, v, 0,
+			   phyaddr_0, phyaddr_1);
+
+	if (ipu_is_dmfc_chan(dma_chan)) {
+		ipu_dmfc_set_wait4eot(dma_chan, width);
+	}
+
+	if (idma_is_set(IDMAC_CHA_PRI, dma_chan))
+		ipu_ch_param_set_high_priority(dma_chan);
+
+	ipu_ch_param_dump(dma_chan);
+
+	reg = __raw_readl(IPU_CHA_DB_MODE_SEL(dma_chan));
+	if (phyaddr_1)
+		reg |= idma_mask(dma_chan);
+	else
+		reg &= ~idma_mask(dma_chan);
+	__raw_writel(reg, IPU_CHA_DB_MODE_SEL(dma_chan));
+
+	/* Reset to buffer 0 */
+	__raw_writel(idma_mask(dma_chan), IPU_CHA_CUR_BUF(dma_chan));
 
 	return 0;
 }
@@ -267,6 +429,7 @@ void ipu_init_dc_mappings(void)
 	ipu_dc_map_config(4, 2, 21, 0xFC);
 }
 
+#if 0
 static int dmfc_size_28, dmfc_size_29, dmfc_size_24, dmfc_size_27, dmfc_size_23;
 void ipu_dmfc_init() {
 	uint32_t dmfc_wr_chan, dmfc_dp_chan;
@@ -286,7 +449,7 @@ void ipu_dmfc_init() {
 	REG32_STORE(DMFC_DP_CHAN, dmfc_dp_chan);
 	REG32_STORE(DMFC_DP_CHAN_DEF, 0x2020F6F6);
 }
-
+#endif
 #define DCIC1_BASE 0x20E4000
 #define DCIC2_BASE 0x20E8000
 
@@ -361,11 +524,12 @@ int ipu_probe(void)
 	REG32_STORE(IPU_INT_CTRL(10), 0xFFFFFFFF);
 
 	/* Init DMFC */
-	ipu_dmfc_init();
+	ipu_dmfc_init(DMFC_NORMAL, 1);
 
 	/* Setup priority */
-
+	REG32_STORE(0x18800000, IDMAC_CHA_PRI(0));
 	/* Disable IPU clock */
+	REG32_STORE(IPU_DISP_GEN, 0x00400000 | (8 << 18));
 	return 0;
 }
 

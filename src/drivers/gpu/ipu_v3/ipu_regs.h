@@ -156,4 +156,17 @@ struct ipu_dc {
 #define DMFC_GENERAL_2		(IPU_BASE + 0x60018)
 #define DMFC_IC_CTRL		(IPU_BASE + 0x6001C)
 
+#define IPU_MAX_CH	32
+#define _MAKE_CHAN(num, v_in, g_in, a_in, out) \
+	((num << 24) | (v_in << 18) | (g_in << 12) | (a_in << 6) | out)
+#define _MAKE_ALT_CHAN(ch)		(ch | (IPU_MAX_CH << 24))
+#define IPU_CHAN_ID(ch)			(ch >> 24)
+#define IPU_CHAN_ALT(ch)		(ch & 0x02000000)
+#define IPU_CHAN_ALPHA_IN_DMA(ch)	((uint32_t) (ch >> 6) & 0x3F)
+#define IPU_CHAN_GRAPH_IN_DMA(ch)	((uint32_t) (ch >> 12) & 0x3F)
+#define IPU_CHAN_VIDEO_IN_DMA(ch)	((uint32_t) (ch >> 18) & 0x3F)
+#define IPU_CHAN_OUT_DMA(ch)		((uint32_t) (ch & 0x3F))
+#define NO_DMA 0x3F
+#define ALT	1
+
 #endif /* SRC_DRIVERS_GPU_IPU_V3_IPU_REGS_H_ */
