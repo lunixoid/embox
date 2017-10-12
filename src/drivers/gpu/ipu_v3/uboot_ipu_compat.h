@@ -1,5 +1,5 @@
 #ifndef UBOOT_IPU_COMPAT_H_
-
+#define UBOOT_IPU_COMPAT_H_
 #include <hal/reg.h>
 #include <stdint.h>
 
@@ -74,5 +74,21 @@ enum ipu_dmfc_type {
 	DMFC_HIGH_RESOLUTION_DP,
 	DMFC_HIGH_RESOLUTION_ONLY_DP,
 };
+
+static __inline__ int test_bit(int nr, const volatile void *addr)
+{
+	return ((1UL << (nr & 31)) & (((const unsigned int *) addr)[nr >> 5])) != 0;
+}
+
+static __inline__ unsigned long ffz(unsigned long word)
+{
+        unsigned long result = 0;
+
+        while (word & 1) {
+                result++;
+                word >>= 1;
+        }
+        return result;
+}
 
 #endif /* UBOOT_IPU_COMPAT_H_ */

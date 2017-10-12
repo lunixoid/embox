@@ -12,7 +12,14 @@
 #include <util/log.h>
 
 #include "ipu_regs.h"
-#include "uboot_ipu_compat.h"
+
+extern void ipu_dp_dc_enable(ipu_channel_t channel);
+
+#define IPU_MAX_WIDTH	1024
+#define IPU_MAX_HEIGHT	768
+
+extern void ipu_dp_dc_enable(ipu_channel_t channel);
+
 struct ipu_ch_param_word {
 	uint32_t data[5];
 	uint32_t res[3];
@@ -66,45 +73,6 @@ struct ipu_ch_param {
 	temp1; \
 })
 
-typedef enum {
-	CHAN_NONE = -1,
-
-	MEM_DC_SYNC = _MAKE_CHAN(7, 28, NO_DMA, NO_DMA, NO_DMA),
-	MEM_DC_ASYNC = _MAKE_CHAN(8, 41, NO_DMA, NO_DMA, NO_DMA),
-	MEM_BG_SYNC = _MAKE_CHAN(9, 23, NO_DMA, 51, NO_DMA),
-	MEM_FG_SYNC = _MAKE_CHAN(10, 27, NO_DMA, 31, NO_DMA),
-
-	MEM_BG_ASYNC0 = _MAKE_CHAN(11, 24, NO_DMA, 52, NO_DMA),
-	MEM_FG_ASYNC0 = _MAKE_CHAN(12, 29, NO_DMA, 33, NO_DMA),
-	MEM_BG_ASYNC1 = _MAKE_ALT_CHAN(MEM_BG_ASYNC0),
-	MEM_FG_ASYNC1 = _MAKE_ALT_CHAN(MEM_FG_ASYNC0),
-
-	DIRECT_ASYNC0 = _MAKE_CHAN(13, NO_DMA, NO_DMA, NO_DMA, NO_DMA),
-	DIRECT_ASYNC1 = _MAKE_CHAN(14, NO_DMA, NO_DMA, NO_DMA, NO_DMA),
-
-} ipu_channel_t;
-
-/*
- * Enumeration of types of buffers for a logical channel.
- */
-typedef enum {
-	IPU_OUTPUT_BUFFER = 0,	/*< Buffer for output from IPU */
-	IPU_ALPHA_IN_BUFFER = 1,	/*< Buffer for input to IPU */
-	IPU_GRAPH_IN_BUFFER = 2,	/*< Buffer for input to IPU */
-	IPU_VIDEO_IN_BUFFER = 3,	/*< Buffer for input to IPU */
-	IPU_INPUT_BUFFER = IPU_VIDEO_IN_BUFFER,
-	IPU_SEC_INPUT_BUFFER = IPU_GRAPH_IN_BUFFER,
-} ipu_buffer_t;
-
-#define IPU_PANEL_SERIAL		1
-#define IPU_PANEL_PARALLEL		2
-
-struct ipu_channel {
-	u8 video_in_dma;
-	u8 alpha_in_dma;
-	u8 graph_in_dma;
-	u8 out_dma;
-};
 
 /* Static functions */
 
@@ -147,7 +115,7 @@ static inline void ipu_ch_param_set_buffer(uint32_t ch, int bufNum,
 static const int ipu_num = 1;             /* 1..2 */
 static const int ipu_word_size_bits = 24; /* 8, 16, 24 or 32 */
 static const int ipu_di = 0;              /* 0..1 */
-static const int ipu_display = 2;         /* 0..3 */
+static const int ipu_display = 0;         /* 0..3 */
 
 static const int ch_num = 7;
 static const int dma_ch = 28;
@@ -239,7 +207,7 @@ int ipu_dc_init(int ch) {
 int ipu_init_channel(int ch) {
 	uint32_t reg;
 
-	ipu_dc_init(ch);
+	ipu_dc_init(1);
 
 	reg = REG32_LOAD(IPU_CONF);
 	reg |= 1 << 22;
@@ -257,8 +225,36 @@ int ipu_init_channel(int ch) {
 	return 0;
 }
 
-int ipu_enable_channel(int ch) {
-	log_debug("%s is NIY", __func__);
+int ipu_enable_channel(int channel) {
+	debug("enter %s", __func__);
+	uint32_t reg;
+	uint32_t in_dma;
+	uint32_t out_dma;
+
+	/* Get input and output dma channels */
+	out_dma = channel_2_dma(channel, IPU_OUTPUT_BUFFER);
+	in_dma = channel_2_dma(channel, IPU_VIDEO_IN_BUFFER);
+
+	debug("1");
+
+	if (idma_is_valid(in_dma)) {
+		debug("read %p", (void*) IDMAC_CHA_EN(in_dma));
+		reg = __raw_readl(IDMAC_CHA_EN(in_dma));
+		debug("write val %x", reg | idma_mask(in_dma));
+		__raw_writel(reg | idma_mask(in_dma), IDMAC_CHA_EN(in_dma));
+	}
+	debug("2");
+	if (idma_is_valid(out_dma)) {
+		reg = __raw_readl(IDMAC_CHA_EN(out_dma));
+		__raw_writel(reg | idma_mask(out_dma), IDMAC_CHA_EN(out_dma));
+	}
+	debug("3");
+
+	if ((channel == MEM_DC_SYNC) || (channel == MEM_BG_SYNC) ||
+	    (channel == MEM_FG_SYNC))
+		ipu_dp_dc_enable(channel);
+
+	debug("4");
 	return 0;
 }
 
@@ -267,12 +263,12 @@ int ipu_disable_channel(int ch) {
 	/* + uninit */
 	return 0;
 }
-
+#if 0
 int ipu_init_sync_panel(int ch) {
 	log_debug("%s is NIY", __func__);
 	return 0;
 }
-
+#endif
 static inline void ipu_ch_params_set_packing(struct ipu_ch_param *p,
 					      int red_width, int red_offset,
 					      int green_width, int green_offset,
@@ -321,7 +317,7 @@ static void ipu_ch_param_init(int ch,
 	ipu_ch_param_set_field(&params, 0, 46, 22, u_offset / 8);
 	ipu_ch_param_set_field(&params, 0, 68, 22, v_offset / 8);
 
-	memcpy(ipu_ch_param_addr(ch_num), &params, sizeof(params));
+	memcpy(ipu_ch_param_addr(ch), &params, sizeof(params));
 }
 
 int ipu_init_channel_buffer(struct fb_info *fbi) {
@@ -396,8 +392,7 @@ static void ipu_dc_map_clear(int map)
 	REG32_STORE(DC_MAP_CONF_PTR(map), reg & ~(0xFFFF << (16 * (map & 0x1))));
 }
 
-void ipu_init_dc_mappings(void)
-{
+void ipu_init_dc_mappings(void) {
 	/* IPU_PIX_FMT_RGB24 */
 	ipu_dc_map_clear(0);
 	ipu_dc_map_config(0, 0, 7, 0xFF);
@@ -482,7 +477,7 @@ int ipu_probe(void)
 	ipu_init_dc_mappings();
 
 	/* Disable all interrupts */
-	for (i = 1; i < 16; i++) {
+	for (i = 1; i < 15; i++) {
 		REG32_STORE(IPU_INT_CTRL(i), 0);
 	}
 
@@ -522,6 +517,9 @@ int ipu_probe(void)
 	REG32_STORE(IPU_INT_CTRL(6),  0xFFFFFFFF);
 	REG32_STORE(IPU_INT_CTRL(9),  0xFFFFFFFF);
 	REG32_STORE(IPU_INT_CTRL(10), 0xFFFFFFFF);
+	for (i = 1; i < 15; i++) {
+		REG32_STORE(IPU_INT_CTRL(i), 0xFFFFFFFF);
+	}
 
 	/* Init DMFC */
 	ipu_dmfc_init(DMFC_NORMAL, 1);
